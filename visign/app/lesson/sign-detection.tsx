@@ -37,13 +37,14 @@ export const SignDetection = ({
   const chunksRef = useRef<Blob[]>([]);
   const holisticRef = useRef<Holistic | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+ const holisticAbortedRef = useRef(false);
 
   // Initialize MediaPipe Holistic (Pose + Hands + Face)
-  const initializeHolistic = useCallback(() => {
+  const initializeHolistic = useCallback(async () => {
     if (holisticRef.current) return;
 
     const holistic = new Holistic({
-      locateFile: (file) => {
+      locateFile: (file: string) => {
         return `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`;
       },
     });
@@ -111,26 +112,33 @@ export const SignDetection = ({
       }
     });
 
+    await holistic.initialize();
     holisticRef.current = holistic;
+
   }, []);
 
-  // Detect pose and hands continuously
-  const detectHolistic = useCallback(() => {
-    if (
-      videoRef.current &&
-      holisticRef.current &&
-      videoRef.current.readyState === 4
-    ) {
-      void holisticRef.current
-        .send({ image: videoRef.current })
-        .catch((error: unknown) => {
-          console.error("Error detecting holistic:", error);
-        });
-    }
+ // Detect pose and hands continuously
+ const detectHolistic = useCallback(() => {
+   if (holisticAbortedRef.current) return;
 
-    // Continue detection loop
-    animationFrameRef.current = requestAnimationFrame(detectHolistic);
-  }, []);
+   if (
+     videoRef.current &&
+     holisticRef.current &&
+     videoRef.current.readyState === 4
+   ) {
+     void holisticRef.current
+       .send({ image: videoRef.current })
+       .catch((error: unknown) => {
+         holisticAbortedRef.current = true;
+         console.warn("MediaPipe Holistic WASM crashed or threw an error — landmark overlay disabled.", error);
+       });
+   }
+
+   // Continue detection loop only if not aborted
+   if (!holisticAbortedRef.current) {
+     animationFrameRef.current = requestAnimationFrame(detectHolistic);
+   }
+ }, []);
 
   const stopCamera = useCallback(() => {
     // Cancel animation frame
@@ -164,16 +172,22 @@ export const SignDetection = ({
         videoRef.current.srcObject = stream;
 
         // Wait for video to be ready
-        videoRef.current.onloadedmetadata = () => {
+        videoRef.current.onloadedmetadata = async () => {
           if (canvasRef.current && videoRef.current) {
             // Set canvas size to match video
             canvasRef.current.width = videoRef.current.videoWidth;
             canvasRef.current.height = videoRef.current.videoHeight;
           }
 
-          // Initialize MediaPipe Holistic and start detection
-          initializeHolistic();
-          void detectHolistic();
+          try {
+            // Initialize MediaPipe Holistic and wait for WASM
+            await initializeHolistic();
+            // Start detection loop
+            void detectHolistic();
+          } catch (e) {
+            console.error("Failed to initialize MediaPipe Holistic:", e);
+            toast.error("Camera initialization failed: Model failed to load");
+          }
         };
       }
       toast.success("Camera đã sẵn sàng!");
