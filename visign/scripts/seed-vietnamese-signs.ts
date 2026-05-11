@@ -1,14 +1,16 @@
-import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import "dotenv/config";
-import { drizzle } from "drizzle-orm/neon-http";
 import * as fs from "fs";
 import { parse } from "csv-parse/sync";
+import * as schema from "@/db/schema";   // giữ nguyên
 
-import * as schema from "@/db/schema";
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
 
-const sql = neon(process.env.DATABASE_URL);
-
-const db = drizzle(sql, { schema });
+const db = drizzle(pool, { schema });
 
 const main = async () => {
   try {
