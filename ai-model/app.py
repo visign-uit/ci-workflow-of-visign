@@ -27,6 +27,10 @@ from src.train.preprocess_pipeline import (
 
 app = FastAPI(title="sudo-visign Web App")
 
+# Prometheus metrics — auto-creates /metrics endpoint
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator().instrument(app).expose(app)
+
 # Mount static files directory
 static_dir = Path("static")
 static_dir.mkdir(exist_ok=True)
