@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: visign-ai
+  namespace: visign
+  labels:
+    app: visign-ai
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: visign-ai
+  template:
+    metadata:
+      labels:
+        app: visign-ai
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: visign-ai
+      containers:
+        - name: visign-ai
+          image: visignacrftll4r7kkywwy.azurecr.io/visign-ai:3439bb10af2602d5db4688dc452cd2b79718e32b   # replaced by CI/CD
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          readinessProbe:
+            httpGet:
+              path: /docs
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /docs
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30

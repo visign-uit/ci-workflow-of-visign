@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: visign-dev
+resources:
+  - ../base
+  - secrets-provider.yaml
+  - ingress.yaml
+patches:
+  - target:
+      kind: Deployment
+      name: visign-web
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: remove
+        path: /spec/template/spec/topologySpreadConstraints
+  - target:
+      kind: Deployment
+      name: visign-ai
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: remove
+        path: /spec/template/spec/topologySpreadConstraints
+images:
+  - name: visignacrftll4r7kkywwy.azurecr.io/visign-ai
+    newName: visignnonprodacrpakerb.azurecr.io/visign-ai
+    newTag: "dev-latest"
+  - name: visignacrftll4r7kkywwy.azurecr.io/visign-web
+    newName: visignnonprodacrpakerb.azurecr.io/visign-web
+    newTag: "dev-pg5"
