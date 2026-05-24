@@ -1,0 +1,132 @@
+name: Reusable Build Push
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        required: true
+        type: string
+      context_path:
+        required: true
+        type: string
+      dockerfile_path:
+        required: true
+        type: string
+      migration_enabled:
+        required: false
+        type: boolean
+        default: false
+      migration_image_name:
+        required: false
+        type: string
+        default: ""
+      migration_dockerfile_path:
+        required: false
+        type: string
+        default: ""
+      migration_build_target:
+        required: false
+        type: string
+        default: ""
+
+    outputs:
+      image_tag:
+        description: Built image tag
+        value: ${{ jobs.build.outputs.image_tag }}
+      image_repository:
+        description: Main image repository
+        value: ${{ jobs.build.outputs.image_repository }}
+      migration_image_repository:
+        description: Migration image repository
+        value: ${{ jobs.build.outputs.migration_image_repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      image_repository: ${{ steps.meta.outputs.image_repository }}
+      migration_image_repository: ${{ steps.meta.outputs.migration_image_repository }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve environment and ACR
+        id: acr
+        run: |
+          set -euo pipefail
+
+          case "${GITHUB_REF_NAME}" in
+            dev)
+              echo "environment=dev" >> "$GITHUB_OUTPUT"
+              echo "acr_login_server=${{ secrets.NONPROD_ACR_LOGIN_SERVER }}" >> "$GITHUB_OUTPUT"
+              echo "acr_username=${{ secrets.NONPROD_ACR_USERNAME }}" >> "$GITHUB_OUTPUT"
+              echo "acr_password=${{ secrets.NONPROD_ACR_PASSWORD }}" >> "$GITHUB_OUTPUT"
+              ;;
+            main)
+              echo "environment=prod" >> "$GITHUB_OUTPUT"
+              echo "acr_login_server=${{ secrets.PROD_ACR_LOGIN_SERVER }}" >> "$GITHUB_OUTPUT"
+              echo "acr_username=${{ secrets.PROD_ACR_USERNAME }}" >> "$GITHUB_OUTPUT"
+              echo "acr_password=${{ secrets.PROD_ACR_PASSWORD }}" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported branch: ${GITHUB_REF_NAME}"
+              exit 1
+              ;;
+          esac
+
+      - name: Prepare image metadata
+        id: meta
+        run: |
+          set -euo pipefail
+
+          SHORT_SHA="${GITHUB_SHA::7}"
+          ENVIRONMENT="${{ steps.acr.outputs.environment }}"
+          ACR="${{ steps.acr.outputs.acr_login_server }}"
+
+          IMAGE_TAG="${ENVIRONMENT}-${SHORT_SHA}"
+          IMAGE_REPOSITORY="${ACR}/${{ inputs.image_name }}"
+
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_repository=${IMAGE_REPOSITORY}" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ inputs.migration_enabled }}" = "true" ]; then
+            echo "migration_image_repository=${ACR}/${{ inputs.migration_image_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "migration_image_repository=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Login to ACR
+        run: |
+          echo "${{ steps.acr.outputs.acr_password }}" | docker login "${{ steps.acr.outputs.acr_login_server }}" \
+            --username "${{ steps.acr.outputs.acr_username }}" \
+            --password-stdin
+
+      - name: Build and push main image
+        run: |
+          set -euo pipefail
+
+          docker build \
+            -f "${{ inputs.dockerfile_path }}" \
+            -t "${{ steps.meta.outputs.image_repository }}:${{ steps.meta.outputs.image_tag }}" \
+            "${{ inputs.context_path }}"
+
+          docker push "${{ steps.meta.outputs.image_repository }}:${{ steps.meta.outputs.image_tag }}"
+
+      - name: Build and push migration image
+        if: inputs.migration_enabled
+        run: |
+          set -euo pipefail
+
+          TARGET_ARG=""
+          if [ -n "${{ inputs.migration_build_target }}" ]; then
+            TARGET_ARG="--target ${{ inputs.migration_build_target }}"
+          fi
+
+          docker build \
+            ${TARGET_ARG} \
+            -f "${{ inputs.migration_dockerfile_path }}" \
+            -t "${{ steps.meta.outputs.migration_image_repository }}:${{ steps.meta.outputs.image_tag }}" \
+            "${{ inputs.context_path }}"
+
+          docker push "${{ steps.meta.outputs.migration_image_repository }}:${{ steps.meta.outputs.image_tag }}"

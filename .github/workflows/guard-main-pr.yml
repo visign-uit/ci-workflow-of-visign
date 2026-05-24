@@ -1,0 +1,18 @@
+name: Guard Main Promotion
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  allow-only-dev-to-main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check source branch
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "Only PR from dev to main is allowed."
+            exit 1
+          fi

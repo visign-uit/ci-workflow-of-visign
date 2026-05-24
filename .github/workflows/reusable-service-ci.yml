@@ -1,0 +1,99 @@
+name: Reusable Service CI
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        required: true
+        type: string
+      service:
+        required: true
+        type: string
+      service_type:
+        required: true
+        type: string
+      context_path:
+        required: true
+        type: string
+      dockerfile_path:
+        required: true
+        type: string
+      image_name:
+        required: true
+        type: string
+      migration_enabled:
+        required: false
+        type: boolean
+        default: false
+      migration_image_name:
+        required: false
+        type: string
+        default: ""
+      migration_dockerfile_path:
+        required: false
+        type: string
+        default: ""
+      migration_build_target:
+        required: false
+        type: string
+        default: ""
+      gitops_values_dev:
+        required: true
+        type: string
+      gitops_values_prod:
+        required: true
+        type: string
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node test
+        if: inputs.service_type == 'node'
+        working-directory: ${{ inputs.context_path }}
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run lint
+          npm test --if-present
+
+      - name: Python test
+        if: inputs.service_type == 'python'
+        working-directory: ${{ inputs.context_path }}
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          ruff check .
+          pytest tests/ -v
+
+  build_push:
+    needs: test
+    if: github.event_name == 'push'
+    uses: visign-uit/visign-gitops/.github/workflows/reusable-build-push.yml@main
+    with:
+      image_name: ${{ inputs.image_name }}
+      context_path: ${{ inputs.context_path }}
+      dockerfile_path: ${{ inputs.dockerfile_path }}
+      migration_enabled: ${{ inputs.migration_enabled }}
+      migration_image_name: ${{ inputs.migration_image_name }}
+      migration_dockerfile_path: ${{ inputs.migration_dockerfile_path }}
+      migration_build_target: ${{ inputs.migration_build_target }}
+    secrets: inherit
+
+  update_gitops:
+    needs: build_push
+    if: github.event_name == 'push'
+    uses: visign-uit/visign-gitops/.github/workflows/reusable-update-gitops-pr.yml@main
+    with:
+      service: ${{ inputs.service }}
+      image_name: ${{ inputs.image_name }}
+      image_tag: ${{ needs.build_push.outputs.image_tag }}
+      image_repository: ${{ needs.build_push.outputs.image_repository }}
+      migration_enabled: ${{ inputs.migration_enabled }}
+      migration_image_repository: ${{ needs.build_push.outputs.migration_image_repository }}
+      values_dev: ${{ inputs.gitops_values_dev }}
+      values_prod: ${{ inputs.gitops_values_prod }}
+    secrets: inherit

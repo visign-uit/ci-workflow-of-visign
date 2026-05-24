@@ -1,0 +1,129 @@
+name: Reusable Update GitOps PR
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        required: true
+        type: string
+      image_name:
+        required: true
+        type: string
+      image_tag:
+        required: true
+        type: string
+      image_repository:
+        required: true
+        type: string
+      migration_enabled:
+        required: false
+        type: boolean
+        default: false
+      migration_image_repository:
+        required: false
+        type: string
+        default: ""
+      values_dev:
+        required: true
+        type: string
+      values_prod:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve target values file
+        id: target
+        run: |
+          set -euo pipefail
+
+          case "${GITHUB_REF_NAME}" in
+            dev)
+              echo "environment=dev" >> "$GITHUB_OUTPUT"
+              echo "values_file=${{ inputs.values_dev }}" >> "$GITHUB_OUTPUT"
+              ;;
+            main)
+              echo "environment=prod" >> "$GITHUB_OUTPUT"
+              echo "values_file=${{ inputs.values_prod }}" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported branch: ${GITHUB_REF_NAME}"
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v4
+        with:
+          repository: visign-uit/visign-gitops
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: visign-gitops
+          fetch-depth: 0
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Update image tag in values
+        run: |
+          set -euo pipefail
+
+          cd visign-gitops
+
+          VALUES_FILE="${{ steps.target.outputs.values_file }}"
+          IMAGE_REPOSITORY="${{ inputs.image_repository }}"
+          IMAGE_TAG="${{ inputs.image_tag }}"
+          MIGRATION_ENABLED="${{ inputs.migration_enabled }}"
+          MIGRATION_IMAGE_REPOSITORY="${{ inputs.migration_image_repository }}"
+
+          yq e -i '.image.repository = strenv(IMAGE_REPOSITORY)' "$VALUES_FILE"
+          yq e -i '.image.tag = strenv(IMAGE_TAG)' "$VALUES_FILE"
+
+          if [ "$MIGRATION_ENABLED" = "true" ]; then
+            yq e -i '.migration.image.repository = strenv(MIGRATION_IMAGE_REPOSITORY)' "$VALUES_FILE"
+            yq e -i '.migration.image.tag = strenv(IMAGE_TAG)' "$VALUES_FILE"
+          fi
+
+          git diff -- "$VALUES_FILE"
+
+      - name: Create pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          cd visign-gitops
+
+          SERVICE="${{ inputs.service }}"
+          ENVIRONMENT="${{ steps.target.outputs.environment }}"
+          IMAGE_TAG="${{ inputs.image_tag }}"
+          VALUES_FILE="${{ steps.target.outputs.values_file }}"
+          BRANCH="bot/promote-${SERVICE}-${ENVIRONMENT}-${IMAGE_TAG}"
+
+          if git diff --quiet; then
+            echo "No changes to create PR."
+            exit 0
+          fi
+
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+          git checkout -b "$BRANCH"
+          git add "$VALUES_FILE"
+          git commit -m "chore(${SERVICE}): promote ${ENVIRONMENT} image ${IMAGE_TAG}"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --repo visign-uit/visign-gitops \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore(${SERVICE}): promote ${ENVIRONMENT} image ${IMAGE_TAG}" \
+            --body "Update ${VALUES_FILE} to image tag ${IMAGE_TAG}. ArgoCD will sync after this PR is merged."
