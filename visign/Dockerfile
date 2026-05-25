@@ -12,8 +12,30 @@ COPY package.json package-lock.json* ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --no-audit --no-fund
 
+
 # ============================================
-# Stage 2: Build Next.js application in standalone mode
+# Stage 2: Database Migration Image for K8s Job
+# ============================================
+FROM node:${NODE_VERSION} AS migrator
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Optional: keep this only if your scripts need psql/pg tools.
+RUN apk add --no-cache postgresql-client
+
+COPY --from=dependencies /app/node_modules ./node_modules
+
+COPY . .
+
+USER node
+
+CMD ["npm", "run", "db:migrate"]
+
+
+# ============================================
+# Stage 3: Build Next.js application in standalone mode
 # ============================================
 FROM node:${NODE_VERSION} AS builder
 
@@ -26,24 +48,21 @@ COPY . .
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# CLERK KEY: bắt buộc truyền lúc build (bị bake vào JS bundle bởi Next.js).
-# Không có fallback → nếu CI quên truyền thì build fail ngay thay vì
-# deploy prod với key sai môi trường.
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ARG DATABASE_URL
+
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+ENV DATABASE_URL=${DATABASE_URL:-postgres://dummy:dummy@localhost:5432/dummy}
+
 RUN test -n "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" || \
     (echo "ERROR: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required" && exit 1)
-
-# DATABASE_URL không cần lúc build — K8s inject runtime qua secretKeyRef.
-# Nếu project chạy "prisma generate" trong npm run build thì cần thêm lại:
-#   ARG DATABASE_URL
-#   ENV DATABASE_URL=${DATABASE_URL:-postgres://dummy:dummy@localhost:5432/dummy}
 
 RUN --mount=type=cache,target=/app/.next/cache \
     npm run build
 
+
 # ============================================
-# Stage 3: Run Next.js application
+# Stage 4: Run Next.js application
 # ============================================
 FROM node:${NODE_VERSION} AS runner
 

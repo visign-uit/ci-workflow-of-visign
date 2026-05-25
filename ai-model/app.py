@@ -27,6 +27,14 @@ from src.train.preprocess_pipeline import (
 
 app = FastAPI(title="sudo-visign Web App")
 
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "ok",
+        "service": "visign-ai",
+        "model_loaded": model_bundle is not None,
+    }
+
 # Prometheus metrics — auto-creates /metrics endpoint
 from prometheus_fastapi_instrumentator import Instrumentator
 Instrumentator().instrument(app).expose(app)

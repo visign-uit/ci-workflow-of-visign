@@ -4,25 +4,26 @@ on:
   push:
     branches: [dev, main]
     paths:
-      - "apps/ai/**"
+      - "ai-model/**"
       - ".github/workflows/**"
 
   pull_request:
     branches: [dev, main]
     paths:
-      - "apps/ai/**"
+      - "ai-model/**"
       - ".github/workflows/**"
 
 jobs:
   ci:
-    uses: lengynthaovan/visign-gitops/.github/workflows/reusable-service-ci.yml@main
+    uses: visign-uit/visign-gitops/.github/workflows/reusable-service-ci.yml@main
     with:
       project: visign
       service: ai
       service_type: python
-      context_path: apps/ai
-      dockerfile_path: apps/ai/Dockerfile
+      context_path: ai-model
+      dockerfile_path: ai-model/Dockerfile
       image_name: visign-ai
+      torch_compute: cpu
       migration_enabled: false
       migration_image_name: ""
       migration_dockerfile_path: ""

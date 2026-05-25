@@ -4,28 +4,28 @@ on:
   push:
     branches: [dev, main]
     paths:
-      - "apps/web/**"
+      - "visign/**"
       - ".github/workflows/**"
 
   pull_request:
     branches: [dev, main]
     paths:
-      - "apps/web/**"
+      - "visign/**"
       - ".github/workflows/**"
 
 jobs:
   ci:
-    uses: lengynthaovan/visign-gitops/.github/workflows/reusable-service-ci.yml@main
+    uses: visign-uit/visign-gitops/.github/workflows/reusable-service-ci.yml@main
     with:
       project: visign
       service: web
       service_type: node
-      context_path: apps/web
-      dockerfile_path: apps/web/Dockerfile
+      context_path: visign
+      dockerfile_path: visign/Dockerfile
       image_name: visign-web
       migration_enabled: true
       migration_image_name: visign-web-migrator
-      migration_dockerfile_path: apps/web/Dockerfile
+      migration_dockerfile_path: visign/Dockerfile
       migration_build_target: migrator
       gitops_values_dev: projects/visign/environments/dev/web.values.yaml
       gitops_values_prod: projects/visign/environments/prod/web.values.yaml
