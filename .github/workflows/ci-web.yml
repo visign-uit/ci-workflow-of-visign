@@ -1,6 +1,8 @@
 name: CI - Web
 
 on:
+  workflow_dispatch:
+
   push:
     branches: [dev, main]
     paths:
@@ -12,6 +14,10 @@ on:
     paths:
       - "visign/**"
       - ".github/workflows/**"
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   ci:
