@@ -16,7 +16,8 @@ on:
       - ".github/workflows/**"
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
   id-token: write
 
 jobs:
@@ -36,5 +37,3 @@ jobs:
       gitops_values_dev: projects/visign/environments/dev/web.values.yaml
       gitops_values_prod: projects/visign/environments/prod/web.values.yaml
     secrets: inherit
-
-# trigger dev ci rerun
