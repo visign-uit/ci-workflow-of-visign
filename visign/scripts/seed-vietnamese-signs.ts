@@ -2,7 +2,7 @@ import "dotenv/config";
 import * as fs from "fs";
 import { parse } from "csv-parse/sync";
 
-import db from "@/db/drizzle";
+import db, { sql } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 
 const main = async () => {
@@ -199,4 +199,11 @@ const main = async () => {
   }
 };
 
-void main();
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await sql.end({ timeout: 5 });
+  });
