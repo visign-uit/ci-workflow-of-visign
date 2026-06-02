@@ -11,8 +11,9 @@
     "format:fix": "prettier --write --ignore-path .gitignore .",
     "db:studio": "npx drizzle-kit studio",
     "db:push": "npx drizzle-kit push",
-    "db:prod1": "tsx ./scripts/prod.ts",
-    "db:prod": "tsx ./scripts/seed-vietnamese-signs.ts",
+    "db:seed-demo": "tsx ./scripts/seed-vietnamese-signs.ts",
+    "db:bootstrap": "npm run db:push && npm run db:seed-demo",
+    "db:prod": "npm run db:seed-demo",
     "db:migrate": "node ./scripts/migrate-db.js",
     "model:start": "node -e \"require('child_process').spawn('cmd', ['/c', 'scripts\\\\start-model-server.bat'], {stdio: 'inherit', shell: true})\""
   },

@@ -31,7 +31,7 @@ COPY . .
 
 USER node
 
-CMD ["npm", "run", "db:migrate"]
+CMD ["npm", "run", "db:bootstrap"]
 
 
 # ============================================
